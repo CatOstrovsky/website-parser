@@ -27,6 +27,7 @@ class Scraper {
     this.outFormat = `xlsx`;
     this.outFile = `./out/parsed_`+Date.now()
     this.imagesDestPath = "./out/images/"
+    this.sleepTime = 100;
 
     this.selectors = {
       category: {
@@ -80,6 +81,7 @@ class Scraper {
   }
 
   getFullUrl(url) {
+    if(!url) return "";
     return ( (url.indexOf(this.params.url) < 0) ? this.params.url : "") + url
   }
 
@@ -108,24 +110,40 @@ class Scraper {
   findAllItems() {
     return new Promise((resolve) => {
       let products;
-      if( (products = DB.getData(`${this.storage.product.main}`)) && this.params.cache === true) {
+      if( (products = DB.getData(`${this.storage.product.main}`)).length && this.params.cache === true) {
         console.log("Were obtained products from the cache... Run with argument \"-c=false\" for ignore cache");
         this.mainProducts = products;
         resolve(this.mainProducts);
         return;
       }
+
       console.log("Find all prodcuts")
+      let sleep = this.sleepTime;
+
       let promises = [];
       this.mainCategories.forEach((item) => {
         if(!item.link.length) return;
+        sleep += this.sleepTime;
 
-        let p = this.promiseRequest( this.getFullUrl(item.link) )
-        .then((res) => {
-          let $ = this.createDom(res.body, false);
-          this.parseMainProducts($);
-        });
-        promises.push(p);
+        {
+          let p = new Promise((resolve) => {
+            setTimeout(() => {
+              this.promiseRequest( this.getFullUrl(item.link) )
+              .then((res) => {
+                process.stdout.write(`Parse ${item.link}\r`)
+                let $ = this.createDom(res.body, false);
+                this.parseMainProducts($);
+                resolve();
+              });
+            })
+          }, sleep)
+          promises.push(p);
+        }
+
+
       });
+
+      console.log(`Items will be parsed after ~${sleep} seconds`)
 
       // When all products was parsed
       Promise.all(promises).then(() => {
